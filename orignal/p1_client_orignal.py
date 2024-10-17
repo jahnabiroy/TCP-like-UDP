@@ -3,7 +3,6 @@ import argparse
 
 # Constants
 MSS = 1400  # Maximum Segment Size
-END_SIGNAL = b"END"  # Signal to indicate end of transmission
 
 def receive_file(server_ip, server_port):
     """
@@ -11,13 +10,14 @@ def receive_file(server_ip, server_port):
     and reordering.
     """
     # Initialize UDP socket
+    
+    ## Add logic for handling packet loss while establishing connection
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client_socket.settimeout(2)  # Set timeout for server response
 
     server_address = (server_ip, server_port)
     expected_seq_num = 0
     output_file_path = "received_file.txt"  # Default file name
-    received_data = {}  # Dictionary to store received packets
 
     with open(output_file_path, 'wb') as file:
         while True:
@@ -28,8 +28,9 @@ def receive_file(server_ip, server_port):
                 # Receive the packet
                 packet, _ = client_socket.recvfrom(MSS + 100)  # Allow room for headers
                 
-                # Check if the packet is the end signal from server
-                if packet == END_SIGNAL:
+                # Logic to handle end of file
+
+                if end_signal from server:
                     print("Received END signal from server, file transfer complete")
                     break
                 
@@ -41,27 +42,16 @@ def receive_file(server_ip, server_port):
                     print(f"Received packet {seq_num}, writing to file")
                     
                     # Update expected seq number and send cumulative ACK for the received packet
-                    expected_seq_num += 1
                     send_ack(client_socket, server_address, seq_num)
                 elif seq_num < expected_seq_num:
                     # Duplicate or old packet, send ACK again
-                    print(f"Received duplicate or old packet {seq_num}, sending ACK again")
                     send_ack(client_socket, server_address, seq_num)
                 else:
-                    # Packet arrived out of order
-                    print(f"Received out of order packet {seq_num}, expecting {expected_seq_num}")
-                    received_data[seq_num] = data  # Store out-of-order packets
-
-                    # Attempt to write any stored out-of-order packets
-                    while expected_seq_num in received_data:
-                        file.write(received_data.pop(expected_seq_num))
-                        print(f"Writing stored packet {expected_seq_num} to file")
-                        expected_seq_num += 1
-                    # Send ACK for the last in-order packet
-                    send_ack(client_socket, server_address, expected_seq_num - 1)
+                    # packet arrived out of order
+                    # handle_pkt()
             except socket.timeout:
                 print("Timeout waiting for data")
-                send_ack(client_socket, server_address, expected_seq_num - 1)  # Resend last ACK
+                
 
 def parse_packet(packet):
     """
@@ -87,3 +77,4 @@ args = parser.parse_args()
 
 # Run the client
 receive_file(args.server_ip, args.server_port)
+

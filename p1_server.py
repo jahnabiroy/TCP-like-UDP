@@ -2,27 +2,32 @@ import socket
 import time
 import argparse
 import logging
-
-MSS = 1400  
-WINDOW_SIZE = 5  
-TIMEOUT = 1.0  
+import json
+import time
+MSS = 1000
+WINDOW_SIZE = 6
+TIMEOUT = 0.5
 DUP_ACK_THRESHOLD = 3
 FILE_PATH = 'sending_file.txt'
+MAX_RETRANSMISSIONS = 10
 
-logging.basicConfig(filename='server.log', level=logging.INFO, 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename='server.log', level=logging.INFO, filemode='w',
+                    format='%(levelname)s - %(message)s')
 
-def create_packet(seq_num, data):
-    """ Create a packet with sequence number and data. """
-    logging.info(f"Sending {seq_num}: {data}")
-    return f"{seq_num}|{data.decode('utf-8')}".encode('utf-8')
-
+def create_packet(seq_num, data, start = False, end = False):
+    packet = {
+        "seq_num": seq_num,
+        "data_length": len(data),
+        "data": data,
+        "start": start,
+        "end": end
+    }
+    json_str = json.dumps(packet)
+    return json_str.encode('utf-8')
+    
 def get_seq_no_from_ack_pkt(ack_packet):
-    """ Extract sequence number from the acknowledgment packet. """
-    logging.info(f"Ack Packet: {ack_packet}")
-    ack_string = ack_packet.decode('utf-8')
-    seq_num_str = ack_string.split('|')[0]  # Split and get the sequence number part
-    return int(seq_num_str)  # Convert to an integer and return
+    json_packet = json.loads(ack_packet.decode('utf-8'))
+    return json_packet['seq_num'],json_packet['end']
 
 def send_file(server_ip, server_port,fast_recovery):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -35,46 +40,66 @@ def send_file(server_ip, server_port,fast_recovery):
     ack_packet, client_address = server_socket.recvfrom(1024)
     logging.info(f"Client Address: {client_address}")
 
-
-    # Handshake phase
-    handshake_packet = create_packet(-1, b'START')
-    logging.info("Sending handshake packet...")
-    server_socket.sendto(handshake_packet, (server_ip, server_port))
-
-    # Wait for acknowledgment of the handshake
-
-    ack_seq_num = get_seq_no_from_ack_pkt(ack_packet)
-    if ack_seq_num == 0:
-        logging.info(f"Handshake successful with client {client_address}")
-
-    with open(file_path, 'rb') as file:
-        seq_num = 0
+    file_data = {}
+    seq_num = 0
+    max_seq = 0
+    ack_data = {}
+    with open(file_path, 'r') as file:
         while True:
             chunk = file.read(MSS)
             if not chunk:
-                # Send end-of-file signal
-                end_packet = create_packet(seq_num, b'END')
-                server_socket.sendto(end_packet, client_address)
-                logging.info("Sent END signal to client.")
+                file_data[seq_num]='EOD'
+                max_seq = max(max_seq,seq_num)
+                seq_num = 0
                 break
-            
-            # Create and send the packet
-            packet = create_packet(seq_num, chunk)
+            file_data[seq_num] = chunk
+            max_seq = max(max_seq,seq_num)
+            ack_data[seq_num] = {"seq_num":seq_num, "ack_rec": False, "ack_count": 0}
+            seq_num += MSS
+
+    logging.info(file_data)
+    logging.info(ack_data)
+    base_seq = 0
+    packet_times = {}
+    while base_seq <= max_seq:
+        for seq_num in range(base_seq, min(max_seq+MSS,base_seq+WINDOW_SIZE*MSS+MSS), MSS):
+            current_time = time.time()
+            if (seq_num in packet_times and current_time - packet_times[seq_num] < TIMEOUT):
+                continue
+
+            packet_times[seq_num] = current_time
+            chunk = file_data[seq_num]
+            if chunk == "EOD":
+                packet = create_packet(seq_num,chunk,start = False,end = True)
+            else:
+                packet = create_packet(seq_num, chunk, start = False)
             server_socket.sendto(packet, client_address)
-            logging.info(f"Sent packet {seq_num}")
-            
-            # Wait for ACK
+            logging.info(f"Sent packet {seq_num} {chunk}")
             try:
                 server_socket.settimeout(TIMEOUT)
                 ack_packet, _ = server_socket.recvfrom(1024)
-                ack_seq_num = get_seq_no_from_ack_pkt(ack_packet)
-                if ack_seq_num >= seq_num:
-                    logging.info(f"Received ACK for packet {ack_seq_num}")
-                    seq_num = ack_seq_num  # Move to the next sequence number
+                ack_seq_num, end = get_seq_no_from_ack_pkt(ack_packet)
+                logging.info(f"Recieved Ack for: {ack_seq_num}")
+                if end:
+                    logging.info(f"File Transfer Complete")
+                    base_seq = max_seq +1
+                    break
+                if(ack_seq_num <= base_seq):
+                    continue
+
+                ack_data[ack_seq_num-MSS]["ack_rec"]=True
+                ack_data[ack_seq_num-MSS]["ack_count"]+=1
+                base_seq = ack_seq_num
+                if ack_data[ack_seq_num-MSS]["ack_count"] >= DUP_ACK_THRESHOLD and fast_recovery:
+                    print("I shoudnt be here")
+                    for seq in range(ack_seq_num-MSS,min(max_seq+MSS,base_seq+WINDOW_SIZE*MSS+MSS),MSS):
+                        ack_data[seq]["ack_count"] = 0
+                        packet_times[seq] = -float('inf')    
+                    
+
             except socket.timeout:
                 logging.warning("Timeout occurred, resending packet.")
-
-
+    
 parser = argparse.ArgumentParser(description='Reliable file transfer server over UDP.')
 parser.add_argument('server_ip', help='IP address of the server')
 parser.add_argument('server_port', type=int, help='Port number of the server')

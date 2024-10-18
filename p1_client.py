@@ -1,14 +1,25 @@
 import socket
 import argparse
 import logging
-
+import json
 # Constants
-MSS = 1400  # Maximum Segment Size
+MSS = 1000
 TIMEOUT = 2
+OUTPUT_FILE = "received_file.txt"
 
-# Set up logging
-logging.basicConfig(filename='client.log', level=logging.INFO, 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename='client.log', level=logging.INFO, filemode='w',
+                    format='%(levelname)s - %(message)s')
+
+def create_packet(seq_num, data, start = False, end = False):
+    packet = {
+        "seq_num": seq_num,
+        "data_length": len(data),
+        "data": data,
+        "start": start,
+        "end": end
+    }
+    json_str = json.dumps(packet)
+    return json_str.encode('utf-8')
 
 def receive_file(server_ip, server_port):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -18,32 +29,33 @@ def receive_file(server_ip, server_port):
     server_address = (server_ip, server_port)
     logging.info(f"Server Address: {server_address}")
     expected_seq_num = 0
-    output_file_path = "received_file.txt"  # Default file name
+    output_file_path = OUTPUT_FILE
 
-    with open(output_file_path, 'wb') as file:
+    with open(output_file_path, 'w') as file:
         while True:
             # Send initial connection request to server
-            client_socket.sendto(b"0|START", server_address)
-
+            packet = create_packet(0,"",True)
+            client_socket.sendto(packet, server_address)
             try:
                 # Receive the packet
-                packet, _ = client_socket.recvfrom(MSS + 100)  # Allow room for headers
-                logging.info(f"Packet received: {packet}")
-                seq_num, data = parse_packet(packet)
+                packet, _ = client_socket.recvfrom(MSS + 200)  # Allow room for headers
+                seq_num, data, end = parse_packet(packet)
 
-                if data == b'END':
+                if end:
+                    packet = create_packet(seq_num,"",start=False,end=True)
+                    send_ack(client_socket,server_address,-1)
                     logging.info("Received END signal from server, file transfer complete")
                     break
 
                 # If the packet is in order, write it to the file
                 if seq_num == expected_seq_num:
                     file.write(data)
-                    logging.info(f"Received packet {seq_num}, writing to file")
-                    expected_seq_num += 1  # Update expected seq number
-                    send_ack(client_socket, server_address, seq_num)  # Send ACK for received packet
+                    logging.info(f"Received packet {seq_num}, writing to file: {data}")
+                    expected_seq_num += MSS  # Update expected seq number
+                    send_ack(client_socket, server_address, seq_num + MSS)  # Send ACK for received packet
                 elif seq_num < expected_seq_num:
                     # Duplicate or old packet, send ACK again
-                    send_ack(client_socket, server_address, seq_num)
+                    send_ack(client_socket, server_address, seq_num + MSS)
                 else:
                     # Packet arrived out of order (not handled in this basic example)
                     logging.warning(f"Received out-of-order packet {seq_num}, expected {expected_seq_num}")
@@ -52,13 +64,16 @@ def receive_file(server_ip, server_port):
                 logging.warning("Timeout waiting for data")
 
 def parse_packet(packet):
-    """ Parse the packet to extract the sequence number and data. """
-    seq_num, data = packet.split(b'|', 1)
-    return int(seq_num), data
+    json_packet = json.loads(packet.decode('utf-8'))
+    seq_num, data, end = json_packet['seq_num'],json_packet['data'],json_packet['end']
+    return seq_num,data,end
 
 def send_ack(client_socket, server_address, seq_num):
     """ Send a cumulative acknowledgment for the received packet. """
-    ack_packet = f"{seq_num}|ACK".encode()
+    if seq_num == -1:
+        ack_packet = create_packet(-1,"",start=False,end=True)
+    else:
+        ack_packet = create_packet(seq_num,"")
     client_socket.sendto(ack_packet, server_address)
     logging.info(f"Sent cumulative ACK for packet {seq_num}")
 

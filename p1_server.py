@@ -1,47 +1,42 @@
 import socket
 import time
 import argparse
-import json
 
 # Constants
 MSS = 1400  # Maximum Segment Size for each packet
-WINDOW_SIZE = 5  # Number of packets in flight
+WINDOW_SIZE =  5 # Number of packets in flight
 DUP_ACK_THRESHOLD = 3  # Threshold for duplicate ACKs to trigger fast recovery
-FILE_PATH = "your_file.txt"  # Replace with your predefined file path
-timeout = 1.0  # Initialize timeout to some value but update it as ACK packets arrive
+FILE_PATH = "your_file.txt"
+TIMEOUT = 1.0  # Initialize timeout to some value but update it as ACK packets arrive
+
 
 def create_packet(seq_num, data):
-    """
-    Create a packet with the sequence number and data.
-    """
-    packet = {
-        'seq_num': seq_num,
-        'data': data.decode('utf-8')  # Assuming data is in bytes, decode for JSON serialization
-    }
-    return json.dumps(packet).encode('utf-8')  # Serialize the packet as JSON
+    """Create a packet with a sequence number and data."""
+    # Packet structure: seq_num (int) + data (bytes)
+    return seq_num.to_bytes(4, 'big') + data
+    
 
-def get_seq_no_from_ack_pkt(ack_pkt):
-    """
-    Extract the expected sequence number from the acknowledgment packet.
-    """
-    return int(ack_pkt.decode('utf-8'))  # Assuming the ack packet is a simple integer
+def get_seq_no_from_ack_pkt(ack_packet):
+    """Extract the sequence number from an ACK packet."""
+    # Assuming the sequence number is sent as the first 4 bytes of the ACK packet
+    return int.from_bytes(ack_packet[:4], 'big')
+
+
+def fast_recovery(server_socket, client_address, unacked_packets = None):
+    """Handle fast retransmit and recovery."""
+    # Retransmit the packet that was indicated by duplicate ACKs
+    if unacked_packets:
+        min_seq_num = min(unacked_packets.keys())
+        packet, _ = unacked_packets[min_seq_num]
+        print(f"Fast retransmitting packet {min_seq_num}")
+        server_socket.sendto(packet, client_address)
 
 def retransmit_unacked_packets(server_socket, client_address, unacked_packets):
-    """
-    Retransmit all unacknowledged packets.
-    """
+    """Retransmit all unacknowledged packets after a timeout."""
     for seq_num, (packet, _) in unacked_packets.items():
+        print(f"Retransmitting packet {seq_num} due to timeout")
         server_socket.sendto(packet, client_address)
-        print(f"Retransmitted packet {seq_num}")
-
-def fast_recovery(server_socket, client_address, unacked_packets, seq_num):
-    """
-    Retransmit the earliest unacknowledged packet (fast recovery).
-    """
-    for seq_num in sorted(unacked_packets.keys()):
-        server_socket.sendto(unacked_packets[seq_num][0], client_address)
-        print(f"Fast recovery: Retransmitted packet {seq_num}")
-        break  # Only retransmit the first unacknowledged packet
+    
 
 def send_file(server_ip, server_port, enable_fast_recovery):
     """
@@ -63,15 +58,16 @@ def send_file(server_ip, server_port, enable_fast_recovery):
         unacked_packets = {}
         duplicate_ack_count = 0
         last_ack_received = -1
-        chunk = None
+
 
         while True:
-            # Use window-based sending
             while seq_num < window_base + WINDOW_SIZE:
                 chunk = file.read(MSS)
                 if not chunk:
-                    # End of file
-                    # Send end signal to the client 
+                    # End of file, send an end-of-file signal to the client
+                    packet = create_packet(seq_num, b'EOF')
+                    if client_address:
+                        server_socket.sendto(packet, client_address)
                     break
 
                 # Create and send the packet
@@ -82,15 +78,16 @@ def send_file(server_ip, server_port, enable_fast_recovery):
                     print("Waiting for client connection...")
                     data, client_address = server_socket.recvfrom(1024)
                     print(f"Connection established with client {client_address}")
+                
 
-                # Track sent packets
                 unacked_packets[seq_num] = (packet, time.time())
                 print(f"Sent packet {seq_num}")
                 seq_num += 1
 
             # Wait for ACKs and retransmit if needed
             try:
-                server_socket.settimeout(timeout)
+            	## Handle ACKs, Timeout, Fast retransmit
+                server_socket.settimeout(TIMEOUT)
                 ack_packet, _ = server_socket.recvfrom(1024)
                 ack_seq_num = get_seq_no_from_ack_pkt(ack_packet)
 
@@ -98,19 +95,20 @@ def send_file(server_ip, server_port, enable_fast_recovery):
                     print(f"Received cumulative ACK for packet {ack_seq_num}")
                     last_ack_received = ack_seq_num
                     # Slide the window forward
-                    # Remove acknowledged packets from the buffer
-                    unacked_packets = {k: v for k, v in unacked_packets.items() if k > ack_seq_num}
                     window_base = ack_seq_num + 1
-                    duplicate_ack_count = 0  # Reset on new ACK
-
+                    # Remove acknowledged packets from the buffer
+                    for seq in list(unacked_packets.keys()):
+                        if seq <= ack_seq_num:
+                            del unacked_packets[seq]
+                    duplicate_ack_count = 0
+                    
                 else:
                     # Duplicate ACK received
                     duplicate_ack_count += 1
                     print(f"Received duplicate ACK for packet {ack_seq_num}, count={duplicate_ack_count}")
-
                     if enable_fast_recovery and duplicate_ack_count >= DUP_ACK_THRESHOLD:
                         print("Entering fast recovery mode")
-                        fast_recovery(server_socket, client_address, unacked_packets, seq_num)
+                        fast_recovery(server_socket, client_address, unacked_packets)
 
             except socket.timeout:
                 # Timeout handling: retransmit all unacknowledged packets

@@ -16,9 +16,8 @@ def receive_file(server_ip, server_port):
 
     server_address = (server_ip, server_port)
     expected_seq_num = 0
-    output_file_path = "received_file.txt"  # Default file name
-    received_data = {}  # Dictionary to store received packets
-
+    output_file_path = "received_file.txt" 
+    received_data = {}
     with open(output_file_path, 'wb') as file:
         while True:
             try:
@@ -29,7 +28,7 @@ def receive_file(server_ip, server_port):
                 packet, _ = client_socket.recvfrom(MSS + 100)  # Allow room for headers
                 
                 # Check if the packet is the end signal from server
-                if packet == END_SIGNAL:
+                if END_SIGNAL in packet:
                     print("Received END signal from server, file transfer complete")
                     break
                 
@@ -41,7 +40,7 @@ def receive_file(server_ip, server_port):
                     print(f"Received packet {seq_num}, writing to file")
                     
                     # Update expected seq number and send cumulative ACK for the received packet
-                    expected_seq_num += 1
+                    expected_seq_num += len(data)
                     send_ack(client_socket, server_address, seq_num)
                 elif seq_num < expected_seq_num:
                     # Duplicate or old packet, send ACK again
@@ -65,10 +64,13 @@ def receive_file(server_ip, server_port):
 
 def parse_packet(packet):
     """
-    Parse the packet to extract the sequence number and data.
+    Parse the packet to extract the sequence number (4 bytes) and data.
     """
-    seq_num, data = packet.split(b'|', 1)
-    return int(seq_num), data
+    # Extract the first 4 bytes for the sequence number (big-endian) and the rest is data
+    seq_num = int.from_bytes(packet[:4], 'big')  # Extract the sequence number from the first 4 bytes
+    data = packet[4:]  # The rest is the data
+    return seq_num, data
+
 
 def send_ack(client_socket, server_address, seq_num):
     """

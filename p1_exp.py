@@ -75,9 +75,10 @@ def run(expname):
 
                     # Create the custom topology with the specified loss
                     topo = CustomTopo(loss=LOSS, delay=DELAY)
-
+                    print("thanos")
                     # Initialize the network with the custom topology and TCLink for link configuration
                     net = Mininet(topo=topo, link=TCLink, controller=None)
+                    
                     # Add the remote controller to the network
                     remote_controller = RemoteController('c0', ip=controller_ip, port=controller_port)
                     net.addController(remote_controller)
@@ -97,6 +98,7 @@ def run(expname):
                     ttc = end_time-start_time
                     md5_hash = compute_md5('received_file.txt')
                     # write the result to a file 
+                    
                     f_out.write(f"{LOSS},{DELAY},{FAST_RECOVERY},{md5_hash},{ttc}\n")
                             
 

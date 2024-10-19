@@ -11,7 +11,7 @@ DUP_ACK_THRESHOLD = 3
 FILE_PATH = 'sending_file.txt'
 MAX_RETRANSMISSIONS = 10
 
-logging.basicConfig(filename='server_1.log', level=logging.INFO, filemode='w',
+logging.basicConfig(filename='server_2.log', level=logging.INFO, filemode='w',
                     format='%(levelname)s - %(message)s')
 
 def create_packet(seq_num, data, start = False, end = False):

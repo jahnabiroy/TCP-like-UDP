@@ -7,7 +7,7 @@ MSS = 1400
 TIMEOUT = 2
 OUTPUT_FILE = "received_file.txt"
 
-logging.basicConfig(filename='client_1.log', level=logging.INFO, filemode='w',
+logging.basicConfig(filename='client_2.log', level=logging.INFO, filemode='w',
                     format='%(levelname)s - %(message)s')
 
 def create_packet(seq_num, data, start = False, end = False):

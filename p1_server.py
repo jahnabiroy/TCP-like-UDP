@@ -6,7 +6,7 @@ import json
 import time
 MSS = 1400
 WINDOW_SIZE = 6
-TIMEOUT = 0.5
+TIMEOUT = 0.0465
 DUP_ACK_THRESHOLD = 3
 FILE_PATH = 'sending_file.txt'
 MAX_RETRANSMISSIONS = 10
@@ -57,8 +57,8 @@ def send_file(server_ip, server_port,fast_recovery):
             ack_data[seq_num] = {"seq_num":seq_num, "ack_rec": False, "ack_count": 0}
             seq_num += MSS
 
-    logging.info(file_data)
-    logging.info(ack_data)
+    # logging.info(file_data)
+    # logging.info(ack_data)
     base_seq = 0
     packet_times = {}
     while base_seq <= max_seq:
@@ -89,13 +89,15 @@ def send_file(server_ip, server_port,fast_recovery):
 
                 ack_data[ack_seq_num-MSS]["ack_rec"]=True
                 ack_data[ack_seq_num-MSS]["ack_count"]+=1
-                base_seq = ack_seq_num
+                base_seq = max(base_seq,ack_seq_num)
                 if ack_data[ack_seq_num-MSS]["ack_count"] >= DUP_ACK_THRESHOLD and fast_recovery:
-                    print("I shoudnt be here")
-                    for seq in range(ack_seq_num-MSS,min(max_seq+MSS,base_seq+WINDOW_SIZE*MSS+MSS),MSS):
-                        ack_data[seq]["ack_count"] = 0
-                        packet_times[seq] = -float('inf')    
-                    
+                    seq = ack_seq_num
+                    chunk = file_data[seq]
+                    ack_data[seq]["ack_count"] = 0
+                    packet_times[seq] = time.time()
+                    packet = create_packet(seq, chunk, start = False)
+                    logging.info(f"Sending Fast Recovery packet {seq_num} {chunk}")
+
 
             except socket.timeout:
                 logging.warning("Timeout occurred, resending packet.")

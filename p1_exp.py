@@ -55,7 +55,7 @@ def run(expname):
     SERVER_IP = "10.0.0.1"
     SERVER_PORT = 6555
             
-    NUM_ITERATIONS = 5 
+    NUM_ITERATIONS = 20 
     OUTFILE = 'received_file.txt'
     delay_list, loss_list = [], []
     if expname == "loss":
@@ -75,7 +75,6 @@ def run(expname):
 
                     # Create the custom topology with the specified loss
                     topo = CustomTopo(loss=LOSS, delay=DELAY)
-                    print("thanos")
                     # Initialize the network with the custom topology and TCLink for link configuration
                     net = Mininet(topo=topo, link=TCLink, controller=None)
                     
@@ -92,8 +91,10 @@ def run(expname):
 
                     start_time = time.time()
                     
-                    h1.cmd(f"python3 p1_server.py {SERVER_IP} {SERVER_PORT} {FAST_RECOVERY} &")
-                    result = h2.cmd(f"python3 p1_client.py {SERVER_IP} {SERVER_PORT}")
+                    h2.cmd(f"python3 p1_client.py {SERVER_IP} {SERVER_PORT} &")
+                    result = h1.cmd(f"python3 p1_server.py {SERVER_IP} {SERVER_PORT} {FAST_RECOVERY}")
+                    # h1.cmd(f"python3 p1_server.py {SERVER_IP} {SERVER_PORT} {FAST_RECOVERY} &")
+                    # result = h2.cmd(f"python3 p1_client.py {SERVER_IP} {SERVER_PORT}")
                     end_time = time.time()
                     ttc = end_time-start_time
                     md5_hash = compute_md5('received_file.txt')

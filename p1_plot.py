@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 def plot(filename,column):
     data = pd.read_csv(f'{filename}.csv')
     # Separate data based on fast_recovery
-    fast_recovery_true = data[data['fast_recovery'] == True].groupby(f'{column}', as_index=False)['ttc'].mean()
-    fast_recovery_false = data[data['fast_recovery'] == False].groupby(f'{column}', as_index=False)['ttc'].mean()
+    fast_recovery_true = data[data['fast_recovery'] == 1].groupby(f'{column}', as_index=False)['ttc'].mean()
+    fast_recovery_false = data[data['fast_recovery'] == 0].groupby(f'{column}', as_index=False)['ttc'].mean()
 
     # Plot the data
     plt.figure(figsize=(10, 6))

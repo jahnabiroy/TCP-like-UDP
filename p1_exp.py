@@ -48,29 +48,29 @@ def run(expname):
     
     # Output file 
     output_file = f'reliability_{expname}.csv'
-    f_out = open(output_file, 'w')
-    f_out.write("loss,delay,fast_recovery,md5_hash,ttc\n")
+    f_out = open(output_file, 'a')
+    # f_out.write("loss,delay,fast_recovery,md5_hash,ttc\n")
 
 
     SERVER_IP = "10.0.0.1"
     SERVER_PORT = 6555
             
-    NUM_ITERATIONS = 20 
+    NUM_ITERATIONS = 5
     OUTFILE = 'received_file.txt'
     delay_list, loss_list = [], []
     if expname == "loss":
-        loss_list = [x*0.5 for x in range (0, 11)]
+        # loss_list = [4.5]
+        loss_list = reversed([x*0.5 for x in range (0, 5)])
         delay_list = [20]
     elif expname == "delay":
         delay_list = [x for x in range(0, 201, 20)]
         loss_list = [1]
-    print(loss_list, delay_list)
     
     # Loop to create the topology 10 times with varying loss (1% to 10%)
-    for LOSS in loss_list:
-        for DELAY in delay_list:
-            for FAST_RECOVERY in [True, False]:
-                for i in range(0, NUM_ITERATIONS):
+    for DELAY in delay_list:
+        for _ in range(NUM_ITERATIONS):
+            for FAST_RECOVERY in [1, 0]:
+                for LOSS in loss_list:
                     print(f"\n--- Running topology with {LOSS}% packet loss, {DELAY}ms delay and fast recovery {FAST_RECOVERY}")
 
                     # Create the custom topology with the specified loss
@@ -101,11 +101,9 @@ def run(expname):
                     # write the result to a file 
                     
                     f_out.write(f"{LOSS},{DELAY},{FAST_RECOVERY},{md5_hash},{ttc}\n")
-                            
-
+                    f_out.flush()
                     # Stop the network
                     net.stop()
-
                     # Wait a moment before starting the next iteration
                     time.sleep(1)
 

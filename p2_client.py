@@ -50,13 +50,13 @@ class TCPRenoClient:
             # logging.info(f"Writing buffered packet {self.expected_seq_num} to file")
             self.expected_seq_num += MSS
     
-    def receive_file(self, server_ip, server_port):
+    def receive_file(self, server_ip, server_port, output_file):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client_socket.settimeout(TIMEOUT)
         server_address = (server_ip, server_port)
         # logging.info(f"Connecting to server at {server_address}")
         
-        with open(OUTPUT_FILE, 'w') as file:
+        with open(output_file, 'w') as file:
             # Send initial connection request
             packet = self.create_packet(0, "", True)
             client_socket.sendto(packet, server_address)
@@ -116,10 +116,11 @@ def main():
     parser = argparse.ArgumentParser(description='TCP Reno client for reliable file transfer over UDP.')
     parser.add_argument('server_ip', help='IP address of the server')
     parser.add_argument('server_port', type=int, help='Port number of the server')
-    
+    parser.add_argument('--pref_outfile', help='Preferred output file', default='received_file.txt')
     args = parser.parse_args()
     client = TCPRenoClient()
-    client.receive_file(args.server_ip, args.server_port)
+    client.receive_file(args.server_ip, args.server_port,args.pref_outfile)
+    
 
 if __name__ == "__main__":
     main()

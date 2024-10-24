@@ -8,6 +8,7 @@ import time, re, os
 import sys
 import hashlib
 import subprocess 
+import argparse
 
 class DumbbellTopo(Topo):    
     def build(self, delay_sw2_s2='50ms'):
@@ -57,7 +58,7 @@ def compute_md5(file_path):
         print(f"File not found: {file_path}")
         return None
 
-def run():
+def run(delay):
     # Set the log level to info to see detailed output
     setLogLevel('info')
     
@@ -67,8 +68,8 @@ def run():
     
     # Output file 
     output_file = f'p2_fairness.csv'
-    f_out = open(output_file, 'w')
-    f_out.write("delay,md5_hash_1,md5_hash_2,ttc1,ttc2,jfi\n")
+    f_out = open(output_file, 'a')
+    # f_out.write("delay,md5_hash_1,md5_hash_2,ttc1,ttc2,jfi\n")
 
 
     SERVER_IP1 = "10.0.0.3"
@@ -76,14 +77,12 @@ def run():
     SERVER_IP2 = "10.0.0.4"
     SERVER_PORT2 = 6556
             
-    NUM_ITERATIONS = 5 
-    OUTFILE = 'received_file.txt'
-    delay_list = [x for x in range(0, 101, 20)]
+    NUM_ITERATIONS = 1
+    delay_list = [delay]
     
     # Loop to create the topology 10 times with varying loss (1% to 10%)
     for DELAY in delay_list:
         for i in range(0, NUM_ITERATIONS):
-            os.system("mn -c")
             print(f"\n--- Running topology with {DELAY}ms delay --")
             print(DELAY)
             # Create the custom topology with the specified loss
@@ -104,13 +103,13 @@ def run():
             s1 = net.get('s1')
             s2 = net.get('s2')
             
-            pref_c1 = "1"
-            pref_c2 = "2"
+            pref_c1 = "recieved_1.txt"
+            pref_c2 = "recieved_2.txt"
             s1_cmd = f"python3 p2_server.py {SERVER_IP1} {SERVER_PORT1} &"
             s2_cmd = f"python3 p2_server.py {SERVER_IP2} {SERVER_PORT2} &"
             c1_cmd = f"python3 p2_client.py {SERVER_IP1} {SERVER_PORT1} --pref_outfile {pref_c1} &"
             c2_cmd = f"python3 p2_client.py {SERVER_IP2} {SERVER_PORT2} --pref_outfile {pref_c2} &"
-
+            os.system(f"rm -rf {pref_c1} {pref_c2}")
             s1_pid = s1.cmd(s1_cmd)
             s2_pid = s2.cmd(s2_cmd)
             time.sleep(1)
@@ -124,7 +123,7 @@ def run():
                     continue
                 else:
                     c1_pid = c1_pid_raw.split()[-1]
-                    print("started client 1 with PID: {c1_pid}")
+                    print(f"started client 1 with PID: {c1_pid}")
                     break
             
             start_time_c2 = time.time()
@@ -148,16 +147,17 @@ def run():
                     result_c1 = c1.cmd(f'ps')
                     if not result_c1 or str(c1_pid) not in result_c1:  # Process is no longer running
                         end_time_c1 = time.time()
+                        # print("End Client 1")
 
                 if end_time_c2 is None:
                     result_c2 = c2.cmd(f'ps')
                     if not result_c2 or str(c2_pid) not in result_c2:  # Process is no longer running
                         end_time_c2 = time.time()
+                        # print("End Client 2")
            
 
             # Stop the network
             net.stop()
-                
             # calculate metrics
             dur_c1 = end_time_c1 - start_time_c1
             dur_c2 = end_time_c2 - start_time_c2
@@ -166,11 +166,12 @@ def run():
             
             print(dur_c1, dur_c2, jfi) 
             # calculate md5 hash
-            hash1 = compute_md5(f"{pref_c1}received_file.txt")
-            hash2 = compute_md5(f"{pref_c2}received_file.txt")
+            hash1 = compute_md5(pref_c1)
+            hash2 = compute_md5(pref_c2)
 
 
             f_out.write(f"{DELAY},{hash1},{hash2},{dur_c1},{dur_c2},{jfi}\n")
+            f_out.flush()
             # Wait a moment before starting the next iteration
     
     time.sleep(1)
@@ -178,4 +179,7 @@ def run():
     print("\n--- Completed all tests ---")
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('delay', help='delay')
+    args = parser.parse_args()
+    run(float(args.delay))

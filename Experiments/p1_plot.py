@@ -53,5 +53,5 @@ def plot(filename, column):
     plt.savefig(f"{filename}_plot.png")
 
 
-plot("reliability_delay", "delay")
-plot("reliability_loss", "loss")
+plot("p1_reliability_delay", "delay")
+plot("p1_reliability_loss", "loss")

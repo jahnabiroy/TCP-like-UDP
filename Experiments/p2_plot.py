@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Read data from CSV file
-data = pd.read_csv("p2_fairness.csv")
+data = pd.read_csv("p2_fairness_final.csv")
 
 # Grouping the data by 'delay' and calculating the mean
 grouped_data = data.groupby("delay")[["ttc1", "ttc2", "jfi"]].mean()

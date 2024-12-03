@@ -62,4 +62,4 @@ python3 p3_client.py 127.0.0.1 6555
 
 ## Experiments
 
-Delay and Loss experiments have been employed to understand the performance of the mechanisms implemented and the same can be observed in the report as well. Fairness experiments have been performed for congestion control algorithms to figure out how different CCAs (RENO vs CUBIC).
+Delay and Loss experiments have been employed to understand the performance of the mechanisms implemented and the same can be observed in the report as well. Fairness experiments have been performed for congestion control algorithms to figure out how different CCAs (RENO vs CUBIC). CUBIC shows a much higher throuhghput than RENO (nearly thrice).
